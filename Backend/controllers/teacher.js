@@ -1,170 +1,154 @@
-const Course = require('../model/courses');
+const AppDataSource = require("../config/data-source");
+const courseRepository = AppDataSource.getRepository("Course");
+const videoRepository = AppDataSource.getRepository("Video");
 
-exports.uploadCourse =(req,res,next)=>{
+exports.uploadCourse = async (req, res, next) => {
+  const {
+    title,
+    category,
+    name,
+    willLearn,
+    discription,
+    discriptionLong,
+    requirement,
+    price,
+    _id: creatorId,
+  } = req.body;
+  const imageurl = req.file ? req.file.path : null;
 
-   // console.log(req.file)
-    const imageurl=req.file.path; 
-    const userId=req.body._id;
-    const {title,category,name,willLearn,discription,discriptionLong,requirement,price} = req.body;
-    
-    console.log(userId,title)
-
-    const course = new Course({
-        title:title,
-        category:category,
-        imageurl:imageurl,
-        name:name,
-        willLearn:willLearn,
-        discription:discription,
-        discriptionLong:discriptionLong,
-        requirement:requirement,
-        rating:0,
-        price:price,
-        creator:userId,
+  try {
+    // TypeORM create and save
+    const newCourse = courseRepository.create({
+      title,
+      category,
+      imageurl,
+      name,
+      willLearn,
+      discription,
+      discriptionLong,
+      requirement,
+      price,
+      creator: creatorId,
     });
 
-    course.save()
-    .then(result=>{
-        console.log(result);
-        res.status(201).json({message:"Course created successfully",newCourse:result})
-    })
-    .catch(err =>{
-        console.log(err);
-    })
+    const result = await courseRepository.save(newCourse);
 
-}
+    res
+      .status(201)
+      .json({ message: "Course created successfully", newCourse: result });
+  } catch (err) {
+    console.log(err);
+    next(err);
+  }
+};
 
-exports.uploadVideo = (req,res,next)=>{
-    const courseId = req.params.courseID;
-    console.log(req.files);
-    const videos  = req.files;
-   
+exports.uploadVideo = async (req, res, next) => {
+  const { courseID: courseId } = req.params;
+  const videos = req.files;
 
-    let videoContent = []
-   
-    Course.findOne({_id:courseId})
-    .then(course=>{
+  try {
+    // 1. Find the Course
+    const course = await courseRepository.findOneBy({ id: courseId });
+    if (!course) {
+      return res.status(404).json({ message: "Course not found" });
+    }
 
-        videos.forEach(video=>{
-            let videoContentContainer = {
-                videoUrl:null,
-                usersWatched:[],
-            }
-            videoContentContainer.videoUrl = video.path;
-            videoContent.push(videoContentContainer);
-        })  
-        console.log(videoContent);
-        course.videoContent=videoContent;
-        course.save()
-        .then(result=>{
-            res.status(200).json({message:"successfully saved the video"})
-        })
-    })
-    .catch(err=>{
-        console.log(err);
-    })
-} 
+    // 2. Create Video Entities and save them
+    const videoEntities = videos.map((file) =>
+      videoRepository.create({
+        videoUrl: file.path,
+        title: file.originalname,
+        course: course,
+      })
+    );
 
-exports.watchedByUsers = (req,res,next)=>{
-    const userId=req.body.userId;
-    const videoId=req.body.videoId;
-    const courseId=req.body.courseId;
-    console.log(videoId);
-    Course.findById({_id:courseId})
-    .then(course=>{
-        course.videoContent.every(video=>{
-            console.log(video)
-            if(video._id == videoId){
-                if(!video.usersWatched.includes(userId)){
-                    video.usersWatched.push(userId);
-                }
-                console.log("matched found")
-                return false;
-            }
-            return true;
-            console.log("ran")
-        })
-        course.save();
-        console.log(course.videoContent)
-        res.status(200).json({message:"ko"})
-    })
-    .catch(err=>{
-        console.log(err)
-    })
-}
+    // Save all new videos in a single transaction/batch
+    await videoRepository.save(videoEntities);
 
-exports.teacherHome =(req,res,next)=>{
-    userId = req.body.userId;
-    Course.find({creator:userId})
-    .then(course=>{
-        res.status(200).json({data:course})
-    })
-    .catch(err=>{
-        console.log(err);
-    })
-}
+    res.status(201).json({ message: "Videos uploaded successfully" });
+  } catch (err) {
+    console.log(err);
+    next(err);
+  }
+};
 
-exports.deleteCourse=(req,res,next)=>{
-    const courseId=req.body.courseId;
+exports.deleteCourse = async (req, res, next) => {
+  const { courseId } = req.body;
 
-    Course.findByIdAndRemove({_id:courseId})
-    .then(course=>{
-        res.status(200).json({message:"course deleted successfully"})
-    })
-    .catch(err=>{
-        console.log(err)
-    })
-}
+  try {
+    // TypeORM delete call
+    const result = await courseRepository.delete(courseId);
 
-// editing course
-exports.editCourse = (req,res,next)=>{
-    const courseId  = req.body.courseId;
+    if (result.affected === 0) {
+      return res
+        .status(404)
+        .json({ message: "Course not found or already deleted." });
+    }
 
-    Course.findOne({_id:courseId})
-    .then(course=>{
-        res.status(200).json({course})
-    })
-    .catch(err=>{
-        console.log(err)
-    })
-}
+    res.status(200).json({ message: "Course deleted successfully" });
+  } catch (err) {
+    console.log(err);
+    next(err);
+  }
+};
 
-exports.updateCourse=(req,res,next)=>{
-      console.log(req.file)
-     const courseId=req.body.courseId;
-     const title=req.body.title;
-     const category=req.body.category;
-     const imageurl=req.file.path;
-     const name=req.body.name;
-     const willLearn=req.body.willLearn;
-     const discription=req.body.discription;
-     const discriptionLong=req.body.discriptionLong;
-     const requirement=req.body.requirement;
-     const price = req.body.price
-     //const userId=req.body._id;
+exports.editCourse = async (req, res, next) => {
+  const { courseId } = req.body;
 
-     Course.findById({_id:courseId})
-     .then(course=>{
-         course.title=title;
-         course.category=category;
-         course.imageurl=imageurl;
-         course.name=name;
-         course.willLearn=willLearn;
-         course.discription=discription;
-         course.discriptionLong=discriptionLong;
-         course.requirement=requirement;
-        //  course.rating=0;
-         course.price=price;
+  try {
+    const course = await courseRepository.findOneBy({ id: courseId });
 
-         course.save();
-         res.status(201).json({message:"Course editted successfully",course:course})
+    if (!course) {
+      return res.status(404).json({ message: "Course not found" });
+    }
 
-     })
-     .catch(err=>{
-         console.log(err);
-     })
+    res.status(200).json({ course });
+  } catch (err) {
+    console.log(err);
+    next(err);
+  }
+};
 
-     
- 
-}
+exports.updateCourse = async (req, res, next) => {
+  const {
+    courseId,
+    title,
+    category,
+    name,
+    willLearn,
+    discription,
+    discriptionLong,
+    requirement,
+    price,
+  } = req.body;
+  const imageurl = req.file ? req.file.path : undefined;
 
+  try {
+    // 1. Find Course (or use update method if you don't need the entity instance)
+    const course = await courseRepository.findOneBy({ id: courseId });
+    if (!course) {
+      return res.status(404).json({ message: "Course not found" });
+    }
+
+    // 2. Update properties
+    course.title = title;
+    course.category = category;
+    if (imageurl) {
+      course.imageurl = imageurl;
+    }
+    course.name = name;
+    course.willLearn = willLearn;
+    course.discription = discription;
+    course.discriptionLong = discriptionLong;
+    course.requirement = requirement;
+    course.price = price;
+
+    // 3. Save the updated entity
+    await courseRepository.save(course);
+
+    res.status(200).json({ message: "Course updated successfully" });
+  } catch (err) {
+    console.log(err);
+    next(err);
+  }
+};

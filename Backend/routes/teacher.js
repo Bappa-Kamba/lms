@@ -48,10 +48,10 @@ const videoMulter=multer({storage:VideofileStorage,fileFilter:VideofileFilter}).
 
 router.post('/creator/create-course',imageMulter,teacherController.uploadCourse);
 router.post('/creator/videoUpload/:courseID',videoMulter,teacherController.uploadVideo);
-router.post('/creater/homepage',Auth.authentication,teacherController.teacherHome);
+// router.post('/creater/homepage',Auth.authentication,teacherController.teacherHome);
 router.post('/course/delete',Auth.authentication,teacherController.deleteCourse);
 router.post('/course/edit',Auth.authentication,teacherController.editCourse);
 router.put('/course/Update',imageMulter,teacherController.updateCourse)
-router.post('/watchedByuser',teacherController.watchedByUsers)
+// router.post('/watchedByuser',teacherController.watchedByUsers)
 
 module.exports = router;

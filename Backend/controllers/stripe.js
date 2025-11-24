@@ -1,42 +1,50 @@
-const api_key=require('../config/config');
+const api_key = require("../config/config");
 const stripe = require("stripe")(api_key.stripePayment);
-const Course = require('../model/courses')
+const AppDataSource = require("../config/data-source");
+const courseRepository = AppDataSource.getRepository("Course");
 
-exports.stripeCourse =(req,res)=>{
-    const courseId = req.params.courseId;
-    Course.findById({_id:courseId})
-    .then(course=>{
-        res.status(200).json({course:course})
-    })
-    .catch(err=>{
-        console.log(err)
-    })
-}
+exports.stripeCourse = async (req, res, next) => {
+  const { courseId } = req.params;
 
+  try {
+    // TypeORM: findOneBy is used for finding by primary key (ID)
+    const course = await courseRepository.findOneBy({ id: courseId });
 
-exports.stripePayment=(req,res)=>{
+    if (!course) {
+      return res.status(404).json({ message: "Course not found" });
+    }
 
-    let {amount,id} = req.body;
-    console.log(amount,id);
+    res.status(200).json({ course });
+  } catch (err) {
+    console.log(err);
+    next(err);
+  }
+};
 
-    stripe.paymentIntents.create({
-        amount:amount,
-        currency:"inr",
-        description: "Coursera clone just testing",
-        payment_method: id,
-        confirm: true,
-    }).then(response=>{
-        console.log(response);
-            res.status(200).json({
-            message:"payment successful",
-            success:true})}
-    )
-    .catch(err=>{
-        console.log(err);
-        res.json({
-            message: "Payment Failed",
-            success: false,})
-    })
-}
+exports.stripePayment = async (req, res, next) => {
+  const { amount, id } = req.body;
+  console.log(amount, id);
 
+  try {
+    const response = await stripe.paymentIntents.create({
+      amount,
+      currency: "inr",
+      description: "Coursera clone just testing",
+      payment_method: id,
+      confirm: true,
+    });
 
+    console.log(response);
+    res.status(200).json({
+      message: "Payment successful",
+      success: true,
+    });
+  } catch (err) {
+    console.log(err);
+    res.json({
+      message: "Payment Failed",
+      success: false,
+    });
+    next(err);
+  }
+};

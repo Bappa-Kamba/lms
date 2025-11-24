@@ -1,199 +1,129 @@
-const Course = require('../model/courses');
-const User = require('../model/user');
-const PDFDocument = require('pdfkit');
-const fs = require('fs');
-const path= require('path')
+const PDFDocument = require("pdfkit");
+const AppDataSource = require("../config/data-source");
+const courseRepository = AppDataSource.getRepository("Course");
+const userRepository = AppDataSource.getRepository("User");
 
-exports.CoursePage = (req,res,next)=>{
-    // const courseName=req.params.courseName;
-    const courseId=req.params.courseId;
-    Course.findOne({_id:courseId})
-    .then(course=>{
-        res.status(200).json({course:course})
-    })
-    .catch(err=>{
-        console.log(err)
-        next()
-    })
-}
+exports.CoursePage = async (req, res, next) => {
+  const { courseId } = req.params;
 
-exports.Bookmark = (req,res,next)=>{
+  try {
+    // TypeORM: findOneBy is used for finding by primary key (ID)
+    const course = await courseRepository.findOneBy({ id: courseId });
 
-    const courseId=req.params.courseId;
-    // const courseName=req.params.courseName;
-    const userId = req.body._userID;
+    if (!course) {
+      return res.status(404).json({ message: "Course not found" });
+    }
 
-    User.findById({_id:userId})
-    .then(user=>{
-        if(!user.Bookmark.includes(courseId)){
-            user.Bookmark.push(courseId);
-            console.log("added to bookmark for user")
-        }
-        else{
-            user.Bookmark.splice(user.Bookmark.indexOf(courseId),1);
-            console.log('removed from user bookmark')
-        }
-        user.save()
-        .then(()=>{
-            Course.findById({_id:courseId})
-            .then(course=>{
-                if(!course.bookmark.includes(userId)){
-                    course.bookmark.push(userId);
-                    console.log("bookmarked --- course")
-                }
-                else{
-                    course.bookmark.splice(course.bookmark.indexOf(userId),1);
-                    console.log("course already bookmarked for this user")
-                }
-                course.save()
-                .then(()=>{
-                    console.log("bookmark process completed")
-                    res.status(202).json({message:"successfully bookmarked/unbookmarked"})
-                })
-                console.log(user)
-            })
-            .catch(err=>{
-                console.log(err);
-                console.log("bookmark wasnt done successfullly")
-            })
-        
-        })
-      
-        // console.log()
-        
-    })  
-    .catch(err=>{
-        // console.log(err)
-        throw err;
-    })
-   
-}
+    res.status(200).json({ course });
+  } catch (err) {
+    console.log(err);
+    next(err);
+  }
+};
 
-exports.ShowBookmark =(req,res,next)=>{
-    const userId = req.params.userId;
-    console.log(userId)
+exports.Bookmark = async (req, res, next) => {
+  const { courseId } = req.params;
+  const { _userID: userId } = req.body;
 
-    User.findById({_id:userId})
-    .populate('Bookmark')
-    .exec()
-    .then(course=>{
-        console.log(course)
-        res.json({course:course})
-    })
-    .catch(err=>{
-        console.log(err)
-        next()
-    })
-}
+  try {
+    // 1. Find User and Course with relations (bookmarks for User, bookmarkUsers for Course)
+    // NOTE: You must use the `relations` option to load the linked entities
+    let [user, course] = await Promise.all([
+      userRepository.findOne({
+        where: { id: userId },
+        relations: ["bookmarks"],
+      }),
+      courseRepository.findOne({
+        where: { id: courseId },
+        relations: ["bookmarkUsers"],
+      }),
+    ]);
 
-exports.unbookmark=(req,res,next)=>{
-    const userId= req.body.userId;
-    const courseId=req.body.id;
+    if (!user || !course) {
+      return res.status(404).json({ message: "User or Course not found" });
+    }
 
-    User.findById({_id:userId})
-    .then(user=>{
-        user.Bookmark.splice(user.Bookmark.indexOf(courseId),1);
-        user.save()
-        .then(()=>{
-            Course.findById({_id:courseId})
-            .then(course=>{
-                course.bookmark.splice(course.bookmark.indexOf(userId),1);
-                course.save()
-                .then(()=>{
-                    res.status(200).json({message:"successfully unbookmarked"})
-                })
-            })
-            .catch(err=>{
-                console.log(err)
-                next()
-            })
-        })
-        
-    })
-    .catch(err=>{
-        console.log(err)
-    })
+    // 2. Manage the Many-to-Many Relationship (User Side)
+    const isBookmarkedByUser = user.bookmarks.some((b) => b.id === course.id);
 
-   
-}
+    if (!isBookmarkedByUser) {
+      // Add bookmark
+      user.bookmarks.push(course);
+      console.log("Added to bookmark for user");
+    } else {
+      // Remove bookmark
+      user.bookmarks = user.bookmarks.filter((b) => b.id !== course.id);
+      console.log("Removed from user bookmark");
+    }
 
-exports.rating=(req,res,next)=>{
-    const courseId=req.body.courseId;
-    const new_Rating=req.body.rating;
+    // 3. Save the updated user (TypeORM handles the join table update automatically)
+    await userRepository.save(user);
 
-    Course.findById({_id:courseId})
-    .then(course=>{
-        const total_rating=course.rating.ratingSum+new_Rating;
-        const times_updated=  course.rating.timesUpdated+1;
-        course.rating.timesUpdated+=1;
-        course.rating.ratingSum+=new_Rating;
-        course.rating.ratingFinal= (total_rating/times_updated);
-        
-        course.save();
-        console.log(course)
-        res.status(200).json({course:course})
-    })
-    .catch(err=>{
-        console.log(err);
-        next();
-    })
+    res.status(200).json({
+      message: isBookmarkedByUser
+        ? "Course removed from bookmarks"
+        : "Course added to bookmarks",
+      isBookmarked: !isBookmarkedByUser,
+    });
+  } catch (err) {
+    console.log(err);
+    next(err);
+  }
+};
 
-}
+exports.downloadCertificate = async (req, res, next) => {
+  const { courseId } = req.params;
 
+  try {
+    const course = await courseRepository.findOneBy({ id: courseId });
 
+    if (!course) {
+      return res.status(404).json({ message: "Course not found" });
+    }
 
-
-exports.pdf=(req,res,next)=>{
-    const courseId=req.params.courseId; 
-
-    Course.findById({_id:courseId})
-    .then(course=>{
-        if(!course){
-            res.status(400).json({message:"course doesnt exists!"})
-        }
-
-    const pdfName="invoice-"+courseId+'.pdf';
-    const pdfPath = path.join('Files', pdfName);    
-    const pdfdoc = new PDFDocument();
-
-    res.setHeader('Content-Type', 'application/pdf');
+    const pdfName = "cert-" + courseId + ".pdf";
+    const pdfPath = path.join("Files", pdfName);
+    res.setHeader("Content-Type", "application/pdf");
     res.setHeader(
-      'Content-Disposition',
-      'inline; filename="' + pdfName + '"'
+      "Content-Disposition",
+      'attachment; filename="certificate.pdf"'
     );
-    pdfdoc.pipe(fs.createWriteStream(pdfPath));
 
+    const pdfdoc = new PDFDocument();
+    pdfdoc.pipe(fs.createWriteStream(pdfPath));
     pdfdoc.pipe(res);
-    pdfdoc.fontSize(20).text('HERE IS SOME DESCRIPTION AND TIPS ABOUT THE COURSE , HAVE A GREAT JOURNEY , EXPERIENCE BEST COURSES BY EXPERTIES! THANKYOU ');
+    pdfdoc
+      .fontSize(20)
+      .text(
+        "HERE ARE SOME DESCRIPTIONS AND TIPS ABOUT THE COURSE , HAVE A GREAT JOURNEY , EXPERIENCE BEST COURSES BY EXPERTES! THANK YOU"
+      );
     pdfdoc.moveDown();
-    pdfdoc.fontSize(18).text('---------------CREATOR------------------');
+    pdfdoc.fontSize(18).text("---------------CREATOR------------------");
     pdfdoc.moveDown();
     pdfdoc.text(course.name);
     pdfdoc.moveDown();
-    pdfdoc.fontSize(18).text('------------DESCRIPTION-------------');
+    pdfdoc.fontSize(18).text("------------DESCRIPTION-------------");
     pdfdoc.moveDown();
     pdfdoc.text(course.discription);
     pdfdoc.moveDown();
-    pdfdoc.text('--------------------------------------------');
+    pdfdoc.text("--------------------------------------------");
     pdfdoc.moveDown();
-    pdfdoc.fontSize(18).text('TIPS');
-    pdfdoc.text('--------------------------------------------');
-    pdfdoc.text('1. Treat an online course like a “real” course.');
-    pdfdoc.text('--------------------------------------------');
-    pdfdoc.text('2. Hold yourself accountable');
-    pdfdoc.text('--------------------------------------------');
-    pdfdoc.text(' Practice time management.');
-    pdfdoc.text('--------------------------------------------');
-    pdfdoc.text('4. Create a regular study space and stay organized.');
-    pdfdoc.text('--------------------------------------------');
-    pdfdoc.text('5. Eliminate distractions.');
-    pdfdoc.text('--------------------------------------------');
+    pdfdoc.fontSize(18).text("TIPS");
+    pdfdoc.text("--------------------------------------------");
+    pdfdoc.text("1. Treat an online course like a “real” course.");
+    pdfdoc.text("--------------------------------------------");
+    pdfdoc.text("2. Hold yourself accountable");
+    pdfdoc.text("--------------------------------------------");
+    pdfdoc.text(" Practice time management.");
+    pdfdoc.text("--------------------------------------------");
+    pdfdoc.text("4. Create a regular study space and stay organized.");
+    pdfdoc.text("--------------------------------------------");
+    pdfdoc.text("5. Eliminate distractions.");
+    pdfdoc.text("--------------------------------------------");
     pdfdoc.moveDown();
     pdfdoc.end();
-    })
-    .catch(err=>{
-        console.log(err)
-    })
-
-    
-}
+  } catch (err) {
+    console.log(err);
+    next(err);
+  }
+};

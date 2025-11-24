@@ -59,11 +59,11 @@ class AuthServices {
     // google auth
 
     Google_login(data) { 
-        return axios.post('/google_login',data)
+        return axios.post("/google_auth", data);
     }
     
     Google_Signup(data) { 
-        return axios.post('/google_signup',data)
+        return axios.post("/google_auth", data);
     }
     
 

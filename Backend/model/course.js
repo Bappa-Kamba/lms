@@ -12,7 +12,7 @@ module.exports = new EntitySchema({
     title: { type: "varchar", nullable: false },
     category: { type: "varchar", nullable: false },
     imageUrl: { type: "varchar", nullable: true },
-    authorName: { type: "varchar", nullable: false },
+    // authorName: { type: "varchar", nullable: false },
     willLearn: { type: "text", nullable: true },
     description: { type: "text", nullable: false },
     descriptionLong: { type: "text", nullable: true },

@@ -349,7 +349,7 @@ inputBlurHandler = (event,inputIdentifier)=> {
 
         let form = (
           <div className="login-form">
-              <GoogleLogin
+              {/* <GoogleLogin
                 clientId={process.env.REACT_APP_GOOGLE_API_KEY}
                 render={renderProps => (
                 <button onClick={renderProps.onClick} 
@@ -362,7 +362,8 @@ inputBlurHandler = (event,inputIdentifier)=> {
             onFailure={this.FailResponseGoogle}
             cookiePolicy={'single_host_origin'}/>
 
-              <p className="devider-or">OR</p>
+              <p className="devider-or">OR</p> */}
+              
             <form onSubmit={this.formHandler} >
             
                 {

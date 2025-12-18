@@ -8,3 +8,5 @@ yarn.lock
 build
 .firebaserc
 .env
+
+*.pdf

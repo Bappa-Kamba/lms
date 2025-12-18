@@ -9,8 +9,9 @@ import Url from '../../ApiServices/BackendUrl';
 class CourseDesc extends Component {
 
     state ={
-        bookmarked:this.props.bookmark,
-        CourseId:this.props.CourseId,
+        bookmarked: this.props.bookmark,
+        CourseId: this.props.CourseId,
+        resourcePath: this.props.Resource,
         count:0,
     }
 
@@ -57,27 +58,7 @@ class CourseDesc extends Component {
             
     
 
-        } 
-
-        
-    DownloadPdf=()=>{
-       
-        AuthServices.Download(this.state.CourseId)
-        .then(response => {
-            //console.log(Url)
-            let path =Url+'Files/invoice-'+ this.state.CourseId + '.pdf';
-
-            console.log(path)
-            window.open(path);
-        
-        })
-        .catch(err=>{
-            console.log(err.response)
-        })
-  
-        
-    }      
-
+        }      
      render(){
             //console.log("count==",this.state.count)
             //console.log("Coruse desc = ", this.props.bookmark,this.state.bookmarked)
@@ -132,12 +113,6 @@ class CourseDesc extends Component {
                     </div>
 
                 <div className="flex-row">
-                        <div onClick={this.DownloadPdf} className="play-btn">
-                        <i className="fa fa-download" aria-hidden="true"></i>
-                            <p>Resources</p>
-                            
-                        </div>
-
                         <div className="Bookmarkbtn">
                         <i onClick={this.bookmark} 
                          className={classArray.join(' ')} aria-hidden="true"></i>

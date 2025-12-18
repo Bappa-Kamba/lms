@@ -22,18 +22,16 @@ class Cart extends Component{
     }
 
 
-    componentDidMount(){
-       AuthServices.bookmarkCourses(this.state.userName,this.state.userId) 
-        .then(response => {
+    componentDidMount = async () => {
+       const response = await AuthServices.bookmarkCourses(this.state.userName,this.state.userId)
 
-            console.log("Bookmarked Courses",response);
-            this.setState({Courses: response.data.course.Bookmark});            
-            this.setState({loading:false});                      
-        })
-        .catch(error => {
-            console.log(error.response);
-        })
-       
+       if (!response) {
+            throw Error('Failed to fetch bookmarked courses');
+       }
+
+        console.log("Bookmarked Courses", response);
+        const courses = response.data.course.bookmarks;
+        this.setState({ Courses: courses, loading: false });
     }
 
     remove =(id)=> {
@@ -84,8 +82,6 @@ class Cart extends Component{
          />);
 
         if(!this.state.loading){
-            
-           
             let CourseArray= this.state.Courses.slice(0);
             noOfCourses = CourseArray.length;
 
@@ -120,7 +116,7 @@ class Cart extends Component{
               data = (
               CourseArray.map((item,index)=> {
               
-                let rating = item.rating.ratingFinal;
+                let rating = item.ratingFinal || 0;
                 if(rating ===0) rating =1;
                 return(
                <CartCard 

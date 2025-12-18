@@ -1,52 +1,56 @@
-const mongoose = require('mongoose');
-const Schema = mongoose.Schema;
+const { EntitySchema } = require("typeorm");
 
-const userSchema = new Schema({
-
-    name:{
-        type:String,
-        required:true,
+module.exports = new EntitySchema({
+  name: "User",
+  tableName: "users",
+  columns: {
+    id: {
+      primary: true,
+      type: "int",
+      generated: true,
     },
-    
-    email:{
-        type:String,
-        required:true,
+    name: {
+      type: "varchar",
+      nullable: false,
     },
-    password:{
-        type:String,
-        required:true
+    email: {
+      type: "varchar",
+      unique: true,
+      nullable: false,
     },
-  
-    isverified:{
-        type:Boolean,
-        required:true
+    password: {
+      type: "varchar",
+      nullable: false,
     },
-    resetVerified:{
-        type:Boolean,
-        required:false,
+    isverified: {
+      type: "boolean",
+      default: false,
     },
-
-    courses:[
-        {
-            type:Schema.Types.ObjectId,
-            required:true,
-            ref:"Course",
-        }
-    ],
-
-    preferences:[{type:String}],
-
-    Bookmark:[
-        {
-            type:Schema.Types.ObjectId,
-            required:false,
-            ref:"Course",
-        }]
-
-    //Token:String,
-    //resetToken:String,
-    //resetTokenExpiration:Date,
-    
+    resetVerified: {
+      type: "boolean",
+      default: false,
+    },
+    preferences: {
+      type: "simple-array",
+      nullable: true,
+    },
+  },
+  relations: {
+    createdCourses: {
+      target: "Course",
+      type: "one-to-many",
+      inverseSide: "creator",
+    },
+    bookmarks: {
+      target: "Course",
+      type: "many-to-many",
+      joinTable: { name: "user_bookmarks" },
+      cascade: true,
+    },
+    videosWatched: {
+      target: "Video",
+      type: "many-to-many",
+      joinTable: { name: "user_video_history" },
+    },
+  },
 });
-
-module.exports = mongoose.model('User',userSchema);

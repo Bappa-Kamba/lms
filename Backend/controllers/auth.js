@@ -6,143 +6,119 @@ const nodemailer=require('nodemailer');
 const sendgridTransport=require('nodemailer-sendgrid-transport');
 const {validationResult}=require('express-validator')
 const api_key = require('../config/config');
+const AppDataSource = require("../config/data-source");
 
-const transporter =nodemailer.createTransport(sendgridTransport({
-    auth:{
-        api_key:api_key.Sendgrid
+const userRepository = AppDataSource.getRepository("User");
+const otpRepository = AppDataSource.getRepository("Otp");
+
+// const transporter =nodemailer.createTransport(sendgridTransport({
+//     auth:{
+//         api_key:api_key.Sendgrid
+//     }
+// }))
+
+
+exports.signup = async (req, res) => {
+  const { email, password, name } = req.body;
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(422).json({ message: errors.array() });
+  }
+
+  try {
+    const existingUser = await userRepository.findOne({ where: { email } });
+    if (existingUser) {
+      return res
+        .status(409)
+        .json({ message: "User with this email already exists." });
     }
-}))
 
+    const hashedPassword = await bcrypt.hash(password, 12);
+    const otp = Math.floor(100000 + Math.random() * 900000);
 
-exports.signup = (req,res)=>{
-    const email=req.body.email;
-    const password=req.body.password;
-    // const confirmPassword=req.body.confirmPassword;
-    const name=req.body.name;
+    // 1. Create and save User
+    const newUser = userRepository.create({
+      email,
+      password: hashedPassword,
+      isverified: false,
+      name,
+      resetVerified: false,
+    });
+    await userRepository.save(newUser);
 
-    let otp =null;
-    // let tokenGenerated=null;
-    console.log(name)
+    const expirationTime = new Date(new Date().getTime() + 2 * 60 * 1000);
+    console.log(expirationTime);
+    const newOtp = otpRepository.create({
+      otp: String(otp),
+      email,
+      expiresAt: expirationTime,
+    });
+    await otpRepository.save(newOtp);
 
-    const errors=validationResult(req);
-    if(!errors.isEmpty()){
-        const error=new Error('Validation failed')
-        error.statusCode=422;
-        error.data=errors.array();
-        console.log(error,error[0])
-        res.status(422).json({message:errors.array()})
-        throw error;
-    }
+    // 3. Send Email
+    // await transporter.sendMail({ /* ... email details ... */ });
 
-    bcrypt.hash(password,12)
-        .then(hashedPassword=>{
-            const Newuser = new User(
-                {email:email,
-                password:hashedPassword,
-                isverified:false,
-                name:name,
-                resetVerified:false,
-                });
-            Newuser.save();
-            console.log("details saved in the database")
-           
-          
-            otp=Math.floor(100000 + Math.random()*900000);
+    res.status(201).json({ message: "OTP sent to your Email" });
+  } catch (err) {
+    next(err);
+  }
+};
 
-            const OTP=new Otp({
-                 otp:otp,
-                 email:email
-                })
+exports.otpVerification = async (req,res,next) => {
+  const { email, otp: receivedOtp } = req.body;
 
-            OTP.save();
-            console.log(otp)
-            res.status(201).json({ message: "OTP sent to your Email" });
-        }).then(res =>{
-            transporter.sendMail({
-                to:email,
-                from:"ayush1911052@akgec.ac.in",
-                subject:"OTP Verification",
-                html:` '<h1>Please Verify your account using this OTP: !</h1>
-                        <p>OTP:${otp}</p>'`
-            })
-            console.log("mail sent")
-        })
-           
-            
-}
+  try {
+    // 1. Find OTP
+    const otpEntity = await otpRepository.findOne({ where: { email } });
 
-exports.otpVerification = (req,res,next)=>{
-    const receivedOtp=req.body.otp;
-    const email=req.body.email;
-
-    // validation
-    console.log(receivedOtp,email);
-
-    Otp.findOne({email:email})
-    .then(user=>{
-        if(!user){
-            const error = new Error("Validation failed ,this user does not exist"); // when user not found
-            error.statusCode = 403;
-            error.data = {
-            value: receivedOtp,
-            message: "Invalid email",
-            param: "otp",
-            location: "otpVerification",
-            };
-            res.status(422).json({message:error.data})
-
-            throw error;
-        }
-
-
-        if(user.otp!=receivedOtp){
-            const error = new Error("Wrong Otp entered");
-            error.statusCode = 401;
-            res.status(401).json({ message: "wrong otp entered " });
-            error.data = {
-            value: receivedOtp,
-            message: "Otp incorrect",
-            param: "otp",
-            location: "otp",
-            };
-            throw error;
-        }
-        else{
-            //  correct OTP
-            User.findOne({email:email})
-            .then(user=>{
-                user.isverified=true;  
-                
-                const access_token=jwt.sign({email:email,userId:user._id},api_key.accessToken,{
-                    algorithm: "HS256",
-                    expiresIn:api_key.accessTokenLife
-                });
-                const referesh_token = jwt.sign({email:email}, api_key.refereshToken,{
-                    algorithm: "HS256",
-                    expiresIn:api_key.refereshTokenLife})
-                
-                user.save(result=>{
-                    return res.status(200).json({
-                        message: "otp entered is correct, user successfully added",
-                        access_token:access_token, 
-                        referesh_token:referesh_token,
-                        userId:user._id.toString(),
-                        username:user.name,
-                      });
-                })
-               
-
-            })
-        }
-        
-        
-    })
-    .catch((err) => {
-        if (!err.statusCode) {
-          err.statusCode = 500;
-        }
-        next(err);
+    if (!otpEntity) {
+      return res.status(401).json({
+        message: "OTP not found or expired. Please request a new one.",
       });
+    }
+
+    if (otpEntity.otp !== receivedOtp) {
+      return res.status(401).json({ message: "Invalid OTP" });
+    }
+
+    if (Date.now() > otpEntity.expiresAt.getTime()) {
+      await otpRepository.delete({ email });
+      return res
+        .status(401)
+        .json({ message: "OTP expired. Please request a new one." });
+    }
+
+    // 2. Find and Update User
+    let user = await userRepository.findOne({ where: { email } });
+    if (!user) {
+      return res.status(404).json({ message: "User not found." });
+    }
+
+    user.isverified = true;
+    await userRepository.save(user);
+
+    // 3. Delete OTP
+    await otpRepository.delete({ email });
+
+    const access_token = jwt.sign(
+      { email, userId: user.id },
+      api_key.accessToken,
+      { expiresIn: api_key.accessTokenLife }
+    );
+    const referesh_token = jwt.sign({ email }, api_key.refereshToken, {
+      expiresIn: api_key.refereshTokenLife,
+    });
+
+    res.status(200).json({
+      message: "User verified successfully",
+      access_token,
+      referesh_token,
+      username: user.name,
+      userId: user.id,
+    });
+  } catch (err) {
+    next(err);
+  }
 
 }
 
@@ -174,14 +150,14 @@ exports.resendOtp = (req,res,next)=>{
             res.status(201).json({ message: "OTP sent to your Email" });
     })
     .then( ()=>{
-        transporter.sendMail({
-            to:email,
-            from:"ayush1911052@akgec.ac.in",
-            subject:"OTP Verification",
-            html:` '<h1>Please Verify your account using this OTP: !</h1>
-                    <p>OTP:${otp}</p>'`
-        })
-        console.log("mail sent")
+      // transporter.sendMail({
+      //     to:email,
+      //     from:"ayush1911052@akgec.ac.in",
+      //     subject:"OTP Verification",
+      //     html:` '<h1>Please Verify your account using this OTP: !</h1>
+      //             <p>OTP:${otp}</p>'`
+      // })
+      console.log("mail sent");
     })   
 
     .catch(err=>{
@@ -196,113 +172,55 @@ exports.resendOtp = (req,res,next)=>{
 
 
 
-exports.login = (req,res,next)=>{
-    const email=req.body.email;
-    const password=req.body.password;
+exports.login = async (req,res,next)=>{
+    const { email, password } = req.body;
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(422).json({ message: errors.array() });
+  }
 
-    const errors=validationResult(req);
+  try {
+    // TypeORM findOne call
+    const user = await userRepository.findOne({ where: { email } });
 
-    if(!errors.isEmpty()){
-        const error=new Error('Validation failed')
-        error.statusCode=422;
-        error.data=errors.array();
-        console.log(error,error[0])
-        res.status(422).json({message:"User with this email doesnt exists"})
-        throw error;
+    if (!user) {
+      return res
+        .status(401)
+        .json({ message: "A user with this email could not be found." });
     }
 
-    User.findOne({email:email})
-    .then(user=>{
-        
-        if(user.isverified==false){
-            console.log("user isn't verified")
-         
-            otp=Math.floor(100000 + Math.random()*900000);
-            console.log("otp =",otp)
-            Otp.findOne({email:email})
-            .then(user=>{
-                    // if the otp record is deleted
-                    if(!user){
-                        const OTP=new Otp({
-                            otp:otp,
-                            email:email
-                           })
-           
-                        OTP.save()
-                        .then(()=>{
-                            transporter.sendMail({
-                                to:email,
-                                from:"ayush1911052@akgec.ac.in",
-                                subject:"OTP Verification",
-                                html:` '<h1>Please Verify your account using this OTP: !</h1>
-                                        <p>OTP:${otp}</p>'`
-                                })
-                                
-                                 console.log("mail sent ",otp)
-                                 return res.status(422).json({
-                                    message: " you have not verified your otp, new otp has been sent to your email THANK YOU!",
-                                    redirect:true,
-                                  });      
-                        })
-                    }
-                    else{
-                        user.otp=otp;
-                        user.save()
-                        .then(()=>{
-                            transporter.sendMail({
-                                to:email,
-                                from:"ayush1911052@akgec.ac.in",
-                                subject:"OTP Verification",
-                                html:` '<h1>Please Verify your account using this OTP: !</h1>
-                                        <p>OTP:${otp}</p>'`
-                                })
-                                
-                                console.log("mail sent")
-                                return res.status(422).json({
-                                    message: " you have not verified your otp, new otp has been sent to your email THANK YOU!",
-                                    redirect:true,
-                                });
-                        })
-                    }
-               
-            })
+    if (!user.isverified) {
+      return res
+        .status(401)
+        .json({ message: "Please verify your account first." });
+    }
 
-        }
+    const isMatch = await bcrypt.compare(password, user.password);
 
-        else {
+    if (isMatch) {
+      const access_token = jwt.sign(
+        { email, userId: user.id },
+        api_key.accessToken,
+        { expiresIn: api_key.accessTokenLife }
+      );
+      const referesh_token = jwt.sign({ email }, api_key.refereshToken, {
+        expiresIn: api_key.refereshTokenLife,
+      });
 
-            bcrypt
-            .compare(password,user.password)
-                .then(matchPass=>{
-
-                    if(matchPass){
-                        const access_token = jwt.sign({email:email}, api_key.accessToken,{
-                        algorithm: "HS256",
-                        expiresIn:api_key.accessTokenLife})
-
-                        const referesh_token = jwt.sign({email:email}, api_key.refereshToken,{
-                            algorithm: "HS256",
-                            expiresIn:api_key.refereshTokenLife})
-                    
-                        return res.status(201).json({message:"User logged in!",access_token:access_token,referesh_token:referesh_token,username:user.name,userId:user._id})
-                        
-                    }
-                    else {
-                        return res.status(401).json({message:"password don't match"})
-                    }
-
-                })
-                    
-        .catch(err=>{
-            err=>{
-                if (!err.statusCode) {
-                    err.statusCode = 500;
-                }
-                next(err);
-                }
-            })  
-        }
-    })
+      res.status(200).json({
+        message: "User logged in!",
+        access_token,
+        referesh_token,
+        username: user.name,
+        userId: user.id,
+      });
+    } else {
+      res.status(401).json({ message: "Wrong password!" });
+    }
+  } catch (err) {
+    console.log(err);
+    next(err);
+  }
 }
 
 exports.resetPassword = (req,res,next)=>{
@@ -333,15 +251,14 @@ exports.resetPassword = (req,res,next)=>{
     })
        
         .then(result=>{
-            transporter.sendMail({
-                to:email,
-                from:"ayush1911052@akgec.ac.in",
-                subject:"Reset Password for shelp",
-                html:` '<h1>this is your otp to reset your password: ${otp}</h1>'`
-            })
-            console.log("mail sent  ",otp)
-            res.status(201).json({message:"otp sent to reset password"})
-            
+          // transporter.sendMail({
+          //     to:email,
+          //     from:"ayush1911052@akgec.ac.in",
+          //     subject:"Reset Password for shelp",
+          //     html:` '<h1>this is your otp to reset your password: ${otp}</h1>'`
+          // })
+          // console.log("mail sent  ",otp)
+          res.status(201).json({ message: "otp sent to reset password" });
         })  
         .catch(err=>{
             if (!err.statusCode) {

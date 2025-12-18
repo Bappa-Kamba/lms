@@ -41,8 +41,11 @@ class Homepage extends Component {
 
 
         // fetch all courses if redux store is empty
-        if( this.IsMounted && !this.props.Courses.length)
-            this.props.fetchCourses()
+        if (this.IsMounted && !this.props.Courses.length) {
+          var courses = this.props.fetchCourses();
+          this.setState({ loading: false });
+          console.log("Courses fetched", courses);
+        }
      }
 
      componentWillUnmount(){
@@ -86,24 +89,27 @@ class Homepage extends Component {
 
             data = (
               CourseArray.map(item => {
-               let rating=[item ? item.rating.ratingFinal : 0];
+               let rating = [item ? item.ratingFinal : 0];
                 if(rating ===0) rating=1;
                 
-              return(
-              
-              <NavLink className="productLink" key={item._id}
-                exact to={`/course/${this.state.CourseLink}/${item._id}`}>
-                <CourseCards   
-                    key={item._id}
+              return (
+                <NavLink
+                  className="productLink"
+                  key={item.id}
+                  exact
+                  to={`/course/${this.state.CourseLink}/${item.id}`}
+                >
+                  <CourseCards
+                    key={item.id}
                     title={item.title}
                     teacher={item.name}
                     img={Url + item.imageurl}
                     rating={parseInt(rating)}
                     price={item.price}
-                    ratingtimesUpdated={item.rating.timesUpdated}
-                    />
-            
-             </NavLink>)
+                    ratingtimesUpdated={item.timesUpdated}
+                  />
+                </NavLink>
+              );
     
               })  );
             

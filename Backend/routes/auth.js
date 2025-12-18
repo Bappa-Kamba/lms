@@ -5,6 +5,9 @@ const {check} = require('express-validator');
 const Auth = require('../Authentication/is-auth');
 const router= express.Router();
 const User=require('../model/user');
+const dataSource = require("../config/data-source");
+
+const userRepository = dataSource.getRepository("User");
 
 router.post('/signup',[
 
@@ -12,12 +15,16 @@ router.post('/signup',[
     .isEmail()
     .withMessage('Please enter a valid email')
     .custom((value,{req})=>{
-        return User.findOne({email:value})
-        .then(user=>{
-            if(user){
-                return Promise.reject('Email already exists!');
+        return userRepository
+          .findOneBy({ email: value })
+          .then((user) => {
+            if (user) {
+              return Promise.reject("Email already exists!");
             }
-        })
+          })
+          .catch((err) => {
+            return Promise.reject(err);
+          });
     }),
 
     check('password')
@@ -37,12 +44,17 @@ router.post('/login',[
     .isEmail()
     .withMessage('Please enter a valid email')
     .custom((value,{req})=>{
-        return User.findOne({email:value})
-        .then(user=>{
-            if(!user){
-                return Promise.reject('No account with this email !');
+        return userRepository
+          .findOneBy({ email: value })
+          .then((user) => {
+            console.log("USer: ", user);
+            if (!user) {
+              return Promise.reject("No account with this email !");
             }
-        })
+          })
+          .catch((err) => {
+            return Promise.reject(err);
+          });
 
     })],authController.login);
 

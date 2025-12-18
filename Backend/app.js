@@ -17,6 +17,7 @@ const teacherRoutes=require('./routes/teacher')
 const homeRoutes= require('./routes/homepage')
 const courseRoutes=require('./routes/coursepage')
 const stripeRoute=require('./routes/stripe')
+const AppDataSource = require("./config/data-source");
 
 // const {addRoom,getUser} = require('./chat');
 
@@ -142,6 +143,7 @@ app.use(express.static(path.join(__dirname, 'public')));
 app.use('/images',express.static(path.join(__dirname, 'images')));
 app.use('/videos',express.static(path.join(__dirname, 'videos')));
 app.use('/Files',express.static(path.join(__dirname,'Files')));
+app.use("/pdfs", express.static(path.join(__dirname, "pdfs")));
 
 app.use((req, res, next) =>{  // To remove CROS (cross-resource-origin-platform) problem 
   res.setHeader('Access-Control-Allow-Origin',"*"); // to allow all client we use *
@@ -157,16 +159,16 @@ app.use(homeRoutes);
 app.use(courseRoutes);
 app.use(stripeRoute);
 
-if (process.env.NODE_ENV !== 'test') {
-  mongoose
-    .connect(MONGODB_URI,{ useUnifiedTopology: true,useNewUrlParser: true })
-    .then(()=> {
-          server.listen(8080);
-          console.log("Server Started!")
-      })
-    .catch(err => {
-      console.log(err);
+AppDataSource.initialize()
+  .then(() => {
+    console.log("Data Source has been initialized!");
+
+    app.listen(8080, () => {
+      console.log("Server is running on port 8080");
     });
-}
+  })
+  .catch((err) => {
+    console.error("Error during Data Source initialization", err);
+  });
 
 module.exports = app;

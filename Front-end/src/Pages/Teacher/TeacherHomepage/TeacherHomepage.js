@@ -101,11 +101,11 @@ class TeacherHomePage extends Component {
                     title={item.title}
                     teacher={item.name}
                     img={Url + item.imageurl}
-                    rating={parseInt(item.rating.ratingFinal)}
-                    Link={`/course/${this.state.CourseLink}/${item._id}`}
-                    CourseId={item._id}
+                    rating={parseInt(item.ratingFinal || 0)}
+                    Link={`/course/${this.state.CourseLink}/${item.id}`}
+                    CourseId={item.id}
                     price={item.price}
-                    DeleteCourse={()=>this.DeleteCourse(item._id)}
+                    DeleteCourse={()=>this.DeleteCourse(item.id)}
                 />)
     
             );
